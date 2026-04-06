@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sistema de Chamados</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0f1e; --surface: #111827; --card: #1a2235; --border: #1e2d45;
+    --accent-blue: #3b82f6; --accent-green: #10b981; --accent-amber: #f59e0b;
+    --accent-red: #ef4444; --accent-purple: #8b5cf6;
+    --text: #f1f5f9; --text-muted: #64748b; --text-soft: #94a3b8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  .sidebar { position: fixed; left:0; top:0; bottom:0; width:240px; background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; z-index:100; }
+  .logo { padding:24px 20px 20px; border-bottom:1px solid var(--border); }
+  .logo-title { font-size:15px; font-weight:800; }
+  .logo-sub { font-size:11px; color:var(--text-muted); margin-top:2px; font-family:'JetBrains Mono',monospace; }
+  .nav { flex:1; padding:16px 12px; display:flex; flex-direction:column; gap:4px; overflow-y:auto; }
+  .nav-label { font-size:10px; font-weight:700; color:var(--text-muted); letter-spacing:1.2px; text-transform:uppercase; padding:8px 8px 4px; }
+  .nav-btn { display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:8px; border:none; background:transparent; color:var(--text-soft); cursor:pointer; font-family:inherit; font-size:13.5px; font-weight:500; transition:all .15s; width:100%; text-align:left; }
+  .nav-btn:hover { background:var(--card); color:var(--text); }
+  .nav-btn.active { background:rgba(59,130,246,.12); color:var(--accent-blue); }
+  .nav-btn .icon { font-size:16px; width:20px; text-align:center; }
+  .nav-badge { margin-left:auto; background:var(--accent-blue); color:white; font-size:10px; font-weight:700; padding:1px 6px; border-radius:20px; min-width:18px; text-align:center; }
+  .nav-badge.pending { background:var(--accent-amber); color:#1a1a1a; }
+
+  .main { margin-left:240px; min-height:100vh; }
+  .topbar { padding:16px 28px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--surface); position:sticky; top:0; z-index:50; flex-wrap:wrap; }
+  .page-title { font-size:18px; font-weight:700; }
+  .topbar-actions { display:flex; gap:8px; flex-wrap:wrap; }
+
+  .btn-new { display:flex; align-items:center; gap:8px; padding:9px 18px; background:var(--accent-blue); color:white; border:none; border-radius:8px; font-family:inherit; font-size:13.5px; font-weight:600; cursor:pointer; transition:opacity .15s; }
+  .btn-new:hover { opacity:.85; }
+  .btn-excel { display:flex; align-items:center; gap:7px; padding:9px 16px; background:rgba(16,185,129,.12); color:#34d399; border:1px solid rgba(16,185,129,.25); border-radius:8px; font-family:inherit; font-size:13px; font-weight:600; cursor:pointer; transition:all .15s; }
+  .btn-excel:hover { background:rgba(16,185,129,.2); }
+
+  .content { padding:24px 28px; }
+  .stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:24px; }
+  .stat-card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:18px 20px; }
+  .stat-label { font-size:11px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:.8px; margin-bottom:8px; }
+  .stat-value { font-size:30px; font-weight:800; font-family:'JetBrains Mono',monospace; line-height:1; }
+  .stat-value.blue { color:var(--accent-blue); } .stat-value.amber { color:var(--accent-amber); }
+  .stat-value.green { color:var(--accent-green); } .stat-value.red { color:var(--accent-red); }
+
+  .filters { display:flex; gap:10px; margin-bottom:18px; flex-wrap:wrap; align-items:center; }
+  .filter-select,.filter-input { background:var(--card); border:1px solid var(--border); border-radius:8px; color:var(--text); font-family:inherit; font-size:13px; padding:8px 12px; outline:none; transition:border-color .15s; cursor:pointer; }
+  .filter-select:focus,.filter-input:focus { border-color:var(--accent-blue); }
+  .filter-input { flex:1; min-width:200px; }
+  .filter-input::placeholder { color:var(--text-muted); }
+
+  .table-wrap { background:var(--card); border:1px solid var(--border); border-radius:14px; overflow:hidden; }
+  table { width:100%; border-collapse:collapse; }
+  thead tr { border-bottom:1px solid var(--border); }
+  th { padding:13px 16px; text-align:left; font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.8px; white-space:nowrap; }
+  tbody tr { border-bottom:1px solid rgba(30,45,69,.5); transition:background .1s; cursor:pointer; }
+  tbody tr:last-child { border-bottom:none; }
+  tbody tr:hover { background:rgba(59,130,246,.04); }
+  td { padding:12px 16px; font-size:13.5px; color:var(--text-soft); vertical-align:middle; }
+  td.main-text { color:var(--text); font-weight:500; }
+
+  .badge { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:20px; font-size:11.5px; font-weight:600; white-space:nowrap; }
+  .badge-hospital { background:rgba(59,130,246,.15); color:#60a5fa; }
+  .badge-clinica { background:rgba(139,92,246,.15); color:#a78bfa; }
+  .badge-ok { background:rgba(16,185,129,.15); color:#34d399; }
+  .badge-pendente { background:rgba(245,158,11,.15); color:#fbbf24; }
+  .badge-andamento { background:rgba(59,130,246,.15); color:#60a5fa; }
+
+  .thumb { width:38px; height:38px; border-radius:6px; object-fit:cover; border:1px solid var(--border); cursor:zoom-in; transition:transform .15s; }
+  .thumb:hover { transform:scale(1.08); }
+  .thumb-placeholder { width:38px; height:38px; border-radius:6px; background:var(--surface); border:1px dashed var(--border); display:flex; align-items:center; justify-content:center; font-size:16px; color:var(--text-muted); }
+
+  .action-btn { background:transparent; border:none; cursor:pointer; padding:5px; border-radius:6px; font-size:15px; color:var(--text-muted); transition:all .15s; }
+  .action-btn:hover { background:var(--border); color:var(--text); }
+
+  .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.75); backdrop-filter:blur(4px); z-index:200; display:flex; align-items:center; justify-content:center; padding:20px; opacity:0; pointer-events:none; transition:opacity .2s; }
+  .modal-overlay.open { opacity:1; pointer-events:all; }
+  .modal { background:var(--card); border:1px solid var(--border); border-radius:16px; width:100%; max-width:590px; max-height:90vh; overflow-y:auto; transform:translateY(20px); transition:transform .2s; }
+  .modal-overlay.open .modal { transform:translateY(0); }
+  .modal-header { padding:20px 24px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+  .modal-title { font-size:16px; font-weight:700; }
+  .modal-close { background:transparent; border:none; color:var(--text-muted); cursor:pointer; font-size:20px; width:30px; height:30px; display:flex; align-items:center; justify-content:center; border-radius:6px; transition:all .15s; }
+  .modal-close:hover { background:var(--border); color:var(--text); }
+  .modal-body { padding:20px 24px; }
+  .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .form-group { display:flex; flex-direction:column; gap:6px; }
+  .form-group.full { grid-column:1/-1; }
+  label { font-size:12px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:.6px; }
+  .form-control { background:var(--surface); border:1px solid var(--border); border-radius:8px; color:var(--text); font-family:inherit; font-size:13.5px; padding:10px 12px; outline:none; transition:border-color .15s; width:100%; }
+  .form-control:focus { border-color:var(--accent-blue); }
+  textarea.form-control { resize:vertical; min-height:80px; }
+  .modal-footer { padding:16px 24px; border-top:1px solid var(--border); display:flex; gap:10px; justify-content:flex-end; flex-wrap:wrap; }
+  .btn-cancel { padding:9px 18px; background:transparent; border:1px solid var(--border); border-radius:8px; color:var(--text-soft); font-family:inherit; font-size:13.5px; font-weight:600; cursor:pointer; transition:all .15s; }
+  .btn-cancel:hover { background:var(--border); }
+  .btn-save { padding:9px 22px; background:var(--accent-blue); border:none; border-radius:8px; color:white; font-family:inherit; font-size:13.5px; font-weight:600; cursor:pointer; transition:opacity .15s; }
+  .btn-save:hover { opacity:.85; }
+  .btn-save:disabled { opacity:.5; cursor:not-allowed; }
+
+  /* UPLOAD */
+  .upload-area { border:2px dashed var(--border); border-radius:10px; padding:22px; text-align:center; cursor:pointer; transition:all .15s; position:relative; background:var(--surface); }
+  .upload-area:hover,.upload-area.drag { border-color:var(--accent-blue); background:rgba(59,130,246,.05); }
+  .upload-area input[type=file] { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
+  .upload-icon { font-size:28px; margin-bottom:8px; }
+  .upload-text { font-size:13px; color:var(--text-soft); }
+  .upload-hint { font-size:11px; color:var(--text-muted); margin-top:4px; }
+  .upload-progress { height:3px; background:var(--border); border-radius:2px; margin-top:8px; overflow:hidden; display:none; }
+  .upload-progress-bar { height:100%; background:var(--accent-blue); border-radius:2px; transition:width .3s; width:0; }
+  .photos-preview { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .photo-thumb-wrap { position:relative; }
+  .photo-thumb-wrap img { width:76px; height:76px; object-fit:cover; border-radius:8px; border:1px solid var(--border); display:block; cursor:zoom-in; }
+  .photo-remove { position:absolute; top:-6px; right:-6px; width:20px; height:20px; background:var(--accent-red); color:white; border:none; border-radius:50%; font-size:11px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+
+  /* GALLERY */
+  .gallery { display:flex; flex-wrap:wrap; gap:10px; margin-top:8px; }
+  .gallery img { width:90px; height:90px; object-fit:cover; border-radius:10px; border:1px solid var(--border); cursor:zoom-in; transition:transform .15s; }
+  .gallery img:hover { transform:scale(1.05); }
+
+  /* DETAIL */
+  .detail-field { display:flex; flex-direction:column; gap:3px; margin-bottom:16px; }
+  .detail-label { font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.6px; }
+  .detail-value { font-size:14px; color:var(--text); }
+  .detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:0 24px; }
+
+  /* LIGHTBOX */
+  #lightbox { position:fixed; inset:0; background:rgba(0,0,0,.92); z-index:500; display:none; align-items:center; justify-content:center; cursor:zoom-out; }
+  #lightbox.open { display:flex; }
+  #lightbox img { max-width:92vw; max-height:92vh; border-radius:10px; box-shadow:0 0 60px rgba(0,0,0,.8); }
+  #lightbox-close { position:absolute; top:20px; right:24px; font-size:28px; color:white; cursor:pointer; background:none; border:none; }
+
+  .empty { padding:60px 20px; text-align:center; color:var(--text-muted); }
+  .empty-icon { font-size:40px; margin-bottom:12px; }
+  .empty-text { font-size:14px; line-height:1.6; }
+  .loading { padding:40px; text-align:center; color:var(--text-muted); font-size:14px; }
+
+  .toast { position:fixed; bottom:24px; right:24px; background:var(--card); border:1px solid var(--border); border-radius:10px; padding:12px 18px; font-size:13.5px; font-weight:500; color:var(--text); box-shadow:0 8px 30px rgba(0,0,0,.4); z-index:600; transform:translateY(80px); opacity:0; transition:all .25s; }
+  .toast.show { transform:translateY(0); opacity:1; }
+  .toast.success { border-left:3px solid var(--accent-green); }
+  .toast.error { border-left:3px solid var(--accent-red); }
+
+  @media(max-width:900px){ .sidebar{width:200px} .main{margin-left:200px} .stats-row{grid-template-columns:repeat(2,1fr)} }
+  @media(max-width:650px){ .sidebar{display:none} .main{margin-left:0} .form-grid{grid-template-columns:1fr} .form-group.full{grid-column:1} }
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="logo">
+    <div class="logo-title">📋 Chamados</div>
+    <div class="logo-sub">v2.0 · gestão TI</div>
+  </div>
+  <div class="nav">
+    <div class="nav-label">Menu</div>
+    <button class="nav-btn active" onclick="showPage('todos',this)"><span class="icon">🗂️</span> Todos os Chamados <span class="nav-badge" id="badgeTotal">0</span></button>
+    <button class="nav-btn" onclick="showPage('pendentes',this)"><span class="icon">⏳</span> Pendentes <span class="nav-badge pending" id="badgePendente">0</span></button>
+    <button class="nav-btn" onclick="showPage('andamento',this)"><span class="icon">🔧</span> Em Andamento</button>
+    <button class="nav-btn" onclick="showPage('resolvidos',this)"><span class="icon">✅</span> Resolvidos</button>
+    <div class="nav-label" style="margin-top:10px">Unidades</div>
+    <button class="nav-btn" onclick="showPage('hospital',this)"><span class="icon">🏥</span> Hosp. N.S. Lourdes</button>
+    <button class="nav-btn" onclick="showPage('clinica',this)"><span class="icon">🏨</span> Clínica São Lucas</button>
+  </div>
+</nav>
+
+<div class="main">
+  <div class="topbar">
+    <div class="page-title" id="pageTitle">Todos os Chamados</div>
+    <div class="topbar-actions">
+      <button class="btn-excel" onclick="exportExcel()">📊 Exportar Excel</button>
+      <button class="btn-new" onclick="openModal()">＋ Novo Chamado</button>
+    </div>
+  </div>
+  <div class="content">
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-label">Total</div><div class="stat-value blue" id="statTotal">0</div></div>
+      <div class="stat-card"><div class="stat-label">Pendentes</div><div class="stat-value amber" id="statPendente">0</div></div>
+      <div class="stat-card"><div class="stat-label">Resolvidos Hoje</div><div class="stat-value green" id="statHoje">0</div></div>
+      <div class="stat-card"><div class="stat-label">Em Andamento</div><div class="stat-value red" id="statAndamento">0</div></div>
+    </div>
+    <div class="filters">
+      <input class="filter-input" id="searchInput" placeholder="🔍 Buscar por setor, motivo, quem acionou..." oninput="renderTable()">
+      <select class="filter-select" id="filterUnidade" onchange="renderTable()">
+        <option value="">Todas as unidades</option>
+        <option value="Hospital Nossa Senhora de Lourdes">Hospital N.S. de Lourdes</option>
+        <option value="Clínica São Lucas">Clínica São Lucas</option>
+      </select>
+      <select class="filter-select" id="filterStatus" onchange="renderTable()">
+        <option value="">Todos os status</option>
+        <option value="Pendente">Pendente</option>
+        <option value="Em Andamento">Em Andamento</option>
+        <option value="Resolvido">Resolvido</option>
+      </select>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>#</th><th>Foto</th><th>Data</th><th>Unidade</th>
+          <th>Setor</th><th>Motivo</th><th>Acionado por</th>
+          <th>Status</th><th>Resol. Hoje</th><th></th>
+        </tr></thead>
+        <tbody id="tableBody"><tr><td colspan="10"><div class="loading">Conectando ao Firebase...</div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Formulário -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModalOutside(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modalTitle">Novo Chamado</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label>Unidade *</label>
+          <select class="form-control" id="f_unidade">
+            <option value="">Selecione...</option>
+            <option value="Hospital Nossa Senhora de Lourdes">Hospital N.S. de Lourdes</option>
+            <option value="Clínica São Lucas">Clínica São Lucas</option>
+            <option value="Clínica São Lucas">Codingtech  </option>
+          </select>
+        </div>
+        <div class="form-group"><label>Data *</label><input type="date" class="form-control" id="f_data"></div>
+        <div class="form-group"><label>Setor *</label><input class="form-control" id="f_setor" placeholder="Ex: UTI, Recepção, TI..."></div>
+        <div class="form-group"><label>Quem Acionou *</label><input class="form-control" id="f_acionado" placeholder="Nome ou ramal"></div>
+        <div class="form-group full"><label>Motivo / Descrição *</label><textarea class="form-control" id="f_motivo" placeholder="Descreva o problema ou solicitação..."></textarea></div>
+        <div class="form-group"><label>Status</label>
+          <select class="form-control" id="f_status">
+            <option value="Pendente">Pendente</option>
+            <option value="Em Andamento">Em Andamento</option>
+            <option value="Resolvido">Resolvido</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Resolvido no Dia?</label>
+          <select class="form-control" id="f_resolvidoHoje"><option value="Não">Não</option><option value="Sim">Sim</option></select>
+        </div>
+        <div class="form-group full"><label>Observações</label><textarea class="form-control" id="f_obs" placeholder="Notas adicionais..." style="min-height:60px"></textarea></div>
+        <div class="form-group full">
+          <label>📷 Fotos do Trabalho</label>
+          <div class="upload-area" id="uploadArea"
+            ondragover="event.preventDefault();this.classList.add('drag')"
+            ondragleave="this.classList.remove('drag')"
+            ondrop="handleDrop(event)">
+            <input type="file" id="photoInput" accept="image/*" multiple onchange="handleFiles(this.files)">
+            <div class="upload-icon">🖼️</div>
+            <div class="upload-text">Clique ou arraste fotos aqui</div>
+            <div class="upload-hint">JPG, PNG, WEBP · várias fotos permitidas</div>
+          </div>
+          <div class="upload-progress" id="uploadProgress"><div class="upload-progress-bar" id="uploadProgressBar"></div></div>
+          <div class="photos-preview" id="photosPreview"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
+      <button class="btn-save" onclick="saveChamado()" id="btnSave">Salvar Chamado</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Detalhe -->
+<div class="modal-overlay" id="detailOverlay" onclick="closeDetailOutside(event)">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-header">
+      <div class="modal-title" id="detailTitle">Chamado</div>
+      <button class="modal-close" onclick="closeDetail()">✕</button>
+    </div>
+    <div class="modal-body" id="detailBody"></div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeDetail()">Fechar</button>
+      <button class="btn-save" onclick="editFromDetail()" style="background:var(--accent-purple)">✏️ Editar</button>
+      <button class="btn-save" onclick="deleteFromDetail()" style="background:var(--accent-red)">🗑️ Excluir</button>
+    </div>
+  </div>
+</div>
+
+<!-- Lightbox -->
+<div id="lightbox" onclick="closeLightbox()">
+  <button id="lightbox-close" onclick="closeLightbox()">✕</button>
+  <img id="lightbox-img" src="" alt="">
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getFirestore, collection, addDoc, deleteDoc,
+  doc, updateDoc, onSnapshot, query, orderBy, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {
+  getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+
+// ════════════════════════════════════════════
+// 🔥  SUAS CONFIGURAÇÕES DO FIREBASE — EDITE AQUI
+// ════════════════════════════════════════════
+const firebaseConfig = {
+   apiKey: "AIzaSyBJcyF9rURCQT0_IwgEiVQvH7b6iFhhbk0",
+  authDomain: "chamados-hopital.firebaseapp.com",
+  projectId: "chamados-hopital",
+  storageBucket: "chamados-hopital.appspot.com",
+  messagingSenderId: "45373815879",
+  appId: "1:45373815879:web:955c2f74963393ae75c562"
+};
+// ════════════════════════════════════════════
+
+let db, storage;
+try {
+  const app = initializeApp(firebaseConfig);
+  db      = getFirestore(app);
+  storage = getStorage(app);
+  startListener();
+} catch(e) {
+  document.getElementById('tableBody').innerHTML =
+    `<tr><td colspan="10"><div class="empty">
+      <div class="empty-icon">⚙️</div>
+      <div class="empty-text">Configure o Firebase no código.<br>
+      Abra o arquivo <b>chamados.html</b> num editor de texto,<br>
+      localize o bloco <b>firebaseConfig</b> e cole seus dados.</div>
+    </div></td></tr>`;
+}
+
+// ── STATE ──────────────────────────────────────
+let chamados       = [];
+let editingId      = null;
+let detailId       = null;
+let pendingPhotos  = [];   // { file, previewUrl }
+let existingPhotos = [];   // { url, path }
+
+// ── LISTENER ────────────────────────────────────
+function startListener() {
+  const q = query(collection(db, 'chamados'), orderBy('criadoEm', 'desc'));
+  onSnapshot(q, snap => {
+    chamados = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    updateStats();
+    renderTable();
+  });
+}
+
+// ── PAGES ────────────────────────────────────────
+window.showPage = function(page, btn) {
+  const titles = { todos:'Todos os Chamados', pendentes:'Chamados Pendentes', andamento:'Em Andamento', resolvidos:'Resolvidos', hospital:'Hospital N.S. de Lourdes', clinica:'Clínica São Lucas' };
+  document.getElementById('pageTitle').textContent = titles[page];
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const fu = document.getElementById('filterUnidade');
+  const fs = document.getElementById('filterStatus');
+  fu.value = page === 'hospital' ? 'Hospital Nossa Senhora de Lourdes' : page === 'clinica' ? 'Clínica São Lucas' : '';
+  fs.value = page === 'pendentes' ? 'Pendente' : page === 'andamento' ? 'Em Andamento' : page === 'resolvidos' ? 'Resolvido' : '';
+  renderTable();
+};
+
+// ── STATS ────────────────────────────────────────
+function updateStats() {
+  const hoje = new Date().toISOString().split('T')[0];
+  document.getElementById('statTotal').textContent    = chamados.length;
+  document.getElementById('statPendente').textContent = chamados.filter(c => c.status === 'Pendente').length;
+  document.getElementById('statAndamento').textContent= chamados.filter(c => c.status === 'Em Andamento').length;
+  document.getElementById('statHoje').textContent     = chamados.filter(c => c.resolvidoHoje === 'Sim' && c.data === hoje).length;
+  document.getElementById('badgeTotal').textContent   = chamados.length;
+  document.getElementById('badgePendente').textContent= chamados.filter(c => c.status === 'Pendente').length;
+}
+
+// ── TABLE ────────────────────────────────────────
+window.renderTable = function() {
+  const search = document.getElementById('searchInput').value.toLowerCase();
+  const fu = document.getElementById('filterUnidade').value;
+  const fs = document.getElementById('filterStatus').value;
+  const data = chamados.filter(c => {
+    const ms = !search || [c.setor, c.motivo, c.acionado, c.unidade].join(' ').toLowerCase().includes(search);
+    return ms && (!fu || c.unidade === fu) && (!fs || c.status === fs);
+  });
+  const tbody = document.getElementById('tableBody');
+  if (!data.length) {
+    tbody.innerHTML = `<tr><td colspan="10"><div class="empty"><div class="empty-icon">📭</div><div class="empty-text">Nenhum chamado encontrado</div></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = data.map((c, i) => {
+    const fotos = c.fotos || [];
+    const fotoHtml = fotos.length
+      ? `<img src="${fotos[0].url}" class="thumb" onclick="event.stopPropagation();openLightbox('${fotos[0].url}')" title="${fotos.length} foto(s)">`
+      : `<div class="thumb-placeholder">📷</div>`;
+    return `<tr onclick="viewDetail('${c.id}')">
+      <td style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-muted)">${String(i+1).padStart(3,'0')}</td>
+      <td>${fotoHtml}</td>
+      <td>${fmtDate(c.data)}</td>
+      <td><span class="badge ${c.unidade?.includes('Hospital')?'badge-hospital':'badge-clinica'}">${c.unidade?.includes('Hospital')?'🏥 Hospital':'🏨 Clínica'}</span></td>
+      <td class="main-text">${c.setor||'—'}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.motivo||'—'}</td>
+      <td>${c.acionado||'—'}</td>
+      <td><span class="badge ${sBadge(c.status)}">${sDot(c.status)} ${c.status||'—'}</span></td>
+      <td>${c.resolvidoHoje==='Sim'?'<span class="badge badge-ok">✅ Sim</span>':'<span style="color:var(--text-muted)">—</span>'}</td>
+      <td style="white-space:nowrap">
+        <button class="action-btn" onclick="event.stopPropagation();editChamado('${c.id}')" title="Editar">✏️</button>
+        <button class="action-btn" onclick="event.stopPropagation();doDelete('${c.id}')" title="Excluir">🗑️</button>
+      </td>
+    </tr>`;
+  }).join('');
+};
+
+function sBadge(s) { return s==='Resolvido'?'badge-ok':s==='Em Andamento'?'badge-andamento':'badge-pendente'; }
+function sDot(s)   { return s==='Resolvido'?'✅':s==='Em Andamento'?'🔧':'⏳'; }
+function fmtDate(d){ if(!d) return '—'; const [y,m,day]=d.split('-'); return `${day}/${m}/${y}`; }
+
+// ── UPLOAD ──────────────────────────────────────
+window.handleFiles = function(files) { addPhotos(files); };
+window.handleDrop  = function(e) {
+  e.preventDefault();
+  document.getElementById('uploadArea').classList.remove('drag');
+  addPhotos(e.dataTransfer.files);
+};
+function addPhotos(files) {
+  Array.from(files).forEach(f => {
+    if (!f.type.startsWith('image/')) return;
+    pendingPhotos.push({ file: f, previewUrl: URL.createObjectURL(f) });
+  });
+  renderPreviews();
+}
+function renderPreviews() {
+  const wrap = document.getElementById('photosPreview');
+  const all = [
+    ...existingPhotos.map((p,i) => ({ url: p.url, key: `e-${i}` })),
+    ...pendingPhotos.map((p,i)  => ({ url: p.previewUrl, key: `p-${i}` }))
+  ];
+  wrap.innerHTML = all.map(p =>
+    `<div class="photo-thumb-wrap">
+      <img src="${p.url}" onclick="openLightbox('${p.url}')">
+      <button class="photo-remove" onclick="removePhoto('${p.key}')">✕</button>
+    </div>`).join('');
+}
+window.removePhoto = function(key) {
+  const [t, i] = key.split('-');
+  if (t === 'p') pendingPhotos.splice(+i, 1);
+  else existingPhotos.splice(+i, 1);
+  renderPreviews();
+};
+async function uploadPhotos(chamadoId) {
+  const results = [];
+  const prog = document.getElementById('uploadProgress');
+  const bar  = document.getElementById('uploadProgressBar');
+  prog.style.display = 'block';
+  for (const { file } of pendingPhotos) {
+    const path = `chamados/${chamadoId}/${Date.now()}_${file.name}`;
+    const sRef = ref(storage, path);
+    await new Promise((res, rej) => {
+      const task = uploadBytesResumable(sRef, file);
+      task.on('state_changed',
+        s => { bar.style.width = (s.bytesTransferred / s.totalBytes * 100) + '%'; },
+        rej,
+        async () => { results.push({ url: await getDownloadURL(task.snapshot.ref), path }); res(); }
+      );
+    });
+  }
+  prog.style.display = 'none';
+  bar.style.width = '0';
+  return results;
+}
+
+// ── MODAL FORM ────────────────────────────────────
+window.openModal = function() {
+  editingId = null; pendingPhotos = []; existingPhotos = [];
+  document.getElementById('modalTitle').textContent = 'Novo Chamado';
+  document.getElementById('btnSave').textContent = 'Salvar Chamado';
+  ['f_setor','f_acionado','f_motivo','f_obs'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f_unidade').value = '';
+  document.getElementById('f_data').value = new Date().toISOString().split('T')[0];
+  document.getElementById('f_status').value = 'Pendente';
+  document.getElementById('f_resolvidoHoje').value = 'Não';
+  document.getElementById('photosPreview').innerHTML = '';
+  document.getElementById('photoInput').value = '';
+  document.getElementById('modalOverlay').classList.add('open');
+};
+window.closeModal = function() {
+  document.getElementById('modalOverlay').classList.remove('open');
+  editingId = null; pendingPhotos = []; existingPhotos = [];
+};
+window.closeModalOutside = function(e) { if (e.target === document.getElementById('modalOverlay')) closeModal(); };
+
+window.editChamado = function(id) {
+  const c = chamados.find(x => x.id === id); if (!c) return;
+  editingId = id;
+  pendingPhotos  = [];
+  existingPhotos = (c.fotos || []).map(f => ({ ...f }));
+  document.getElementById('modalTitle').textContent = 'Editar Chamado';
+  document.getElementById('btnSave').textContent = 'Atualizar';
+  document.getElementById('f_unidade').value = c.unidade || '';
+  document.getElementById('f_data').value = c.data || '';
+  document.getElementById('f_setor').value = c.setor || '';
+  document.getElementById('f_acionado').value = c.acionado || '';
+  document.getElementById('f_motivo').value = c.motivo || '';
+  document.getElementById('f_status').value = c.status || 'Pendente';
+  document.getElementById('f_resolvidoHoje').value = c.resolvidoHoje || 'Não';
+  document.getElementById('f_obs').value = c.obs || '';
+  document.getElementById('photoInput').value = '';
+  renderPreviews();
+  document.getElementById('modalOverlay').classList.add('open');
+};
+
+window.saveChamado = async function() {
+  const campos = {
+    unidade:       document.getElementById('f_unidade').value,
+    data:          document.getElementById('f_data').value,
+    setor:         document.getElementById('f_setor').value,
+    acionado:      document.getElementById('f_acionado').value,
+    motivo:        document.getElementById('f_motivo').value,
+    status:        document.getElementById('f_status').value,
+    resolvidoHoje: document.getElementById('f_resolvidoHoje').value,
+    obs:           document.getElementById('f_obs').value,
+  };
+  if (!campos.unidade || !campos.data || !campos.setor || !campos.motivo || !campos.acionado) {
+    showToast('Preencha todos os campos obrigatórios (*)', 'error'); return;
+  }
+  const btn = document.getElementById('btnSave');
+  btn.disabled = true; btn.textContent = 'Salvando...';
+  try {
+    let docId = editingId;
+    if (!docId) {
+      const r = await addDoc(collection(db, 'chamados'), { ...campos, fotos: [], criadoEm: serverTimestamp() });
+      docId = r.id;
+    }
+    const newPhotos = pendingPhotos.length ? await uploadPhotos(docId) : [];
+    await updateDoc(doc(db, 'chamados', docId), { ...campos, fotos: [...existingPhotos, ...newPhotos] });
+    showToast(editingId ? '✅ Chamado atualizado!' : '✅ Chamado criado!', 'success');
+    closeModal();
+  } catch(e) { showToast('Erro: ' + e.message, 'error'); }
+  finally { btn.disabled = false; btn.textContent = editingId ? 'Atualizar' : 'Salvar Chamado'; }
+};
+
+// ── DELETE ────────────────────────────────────────
+async function doDeleteById(id) {
+  const c = chamados.find(x => x.id === id);
+  if (c?.fotos?.length) for (const f of c.fotos) try { await deleteObject(ref(storage, f.path)); } catch(_) {}
+  await deleteDoc(doc(db, 'chamados', id));
+  showToast('🗑️ Chamado excluído', 'success');
+}
+window.doDelete = async function(id) { if (confirm('Excluir este chamado?')) await doDeleteById(id); };
+
+// ── DETAIL ────────────────────────────────────────
+window.viewDetail = function(id) {
+  const c = chamados.find(x => x.id === id); if (!c) return;
+  detailId = id;
+  const fotos = c.fotos || [];
+  document.getElementById('detailTitle').textContent = `Chamado — ${c.setor}`;
+  document.getElementById('detailBody').innerHTML = `
+    <div class="detail-grid">
+      <div class="detail-field"><div class="detail-label">Unidade</div><div class="detail-value">${c.unidade||'—'}</div></div>
+      <div class="detail-field"><div class="detail-label">Data</div><div class="detail-value">${fmtDate(c.data)}</div></div>
+      <div class="detail-field"><div class="detail-label">Setor</div><div class="detail-value">${c.setor||'—'}</div></div>
+      <div class="detail-field"><div class="detail-label">Acionado por</div><div class="detail-value">${c.acionado||'—'}</div></div>
+      <div class="detail-field"><div class="detail-label">Status</div><div class="detail-value">${sDot(c.status)} ${c.status}</div></div>
+      <div class="detail-field"><div class="detail-label">Resolvido Hoje?</div><div class="detail-value">${c.resolvidoHoje==='Sim'?'✅ Sim':'❌ Não'}</div></div>
+    </div>
+    <div class="detail-field"><div class="detail-label">Motivo / Descrição</div><div class="detail-value">${c.motivo||'—'}</div></div>
+    ${c.obs ? `<div class="detail-field"><div class="detail-label">Observações</div><div class="detail-value" style="color:var(--text-soft)">${c.obs}</div></div>` : ''}
+    ${fotos.length ? `<div class="detail-field"><div class="detail-label">📷 Fotos (${fotos.length})</div>
+      <div class="gallery">${fotos.map(f => `<img src="${f.url}" onclick="openLightbox('${f.url}')" loading="lazy">`).join('')}</div>
+    </div>` : ''}`;
+  document.getElementById('detailOverlay').classList.add('open');
+};
+window.closeDetail = function() { document.getElementById('detailOverlay').classList.remove('open'); detailId = null; };
+window.closeDetailOutside = function(e) { if (e.target === document.getElementById('detailOverlay')) closeDetail(); };
+window.editFromDetail   = function() { const id = detailId; closeDetail(); setTimeout(() => editChamado(id), 200); };
+window.deleteFromDetail = async function() {
+  const id = detailId;
+  if (!confirm('Excluir este chamado?')) return;
+  closeDetail();
+  await doDeleteById(id);
+};
+
+// ── LIGHTBOX ────────────────────────────────────
+window.openLightbox  = function(url) { document.getElementById('lightbox-img').src = url; document.getElementById('lightbox').classList.add('open'); };
+window.closeLightbox = function() { document.getElementById('lightbox').classList.remove('open'); };
+
+// ── EXPORTAR EXCEL ───────────────────────────────
+window.exportExcel = function() {
+  const search = document.getElementById('searchInput').value.toLowerCase();
+  const fu = document.getElementById('filterUnidade').value;
+  const fs = document.getElementById('filterStatus').value;
+  const data = chamados.filter(c => {
+    const ms = !search || [c.setor, c.motivo, c.acionado, c.unidade].join(' ').toLowerCase().includes(search);
+    return ms && (!fu || c.unidade === fu) && (!fs || c.status === fs);
+  });
+  if (!data.length) { showToast('Nenhum dado para exportar', 'error'); return; }
+  const rows = data.map((c, i) => ({
+    '#':               i + 1,
+    'Data':            fmtDate(c.data),
+    'Unidade':         c.unidade || '',
+    'Setor':           c.setor || '',
+    'Motivo':          c.motivo || '',
+    'Acionado Por':    c.acionado || '',
+    'Status':          c.status || '',
+    'Resolvido Hoje':  c.resolvidoHoje || 'Não',
+    'Observações':     c.obs || '',
+    'Qtd. Fotos':      (c.fotos || []).length
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [4,12,36,20,55,24,16,14,45,10].map(w => ({ wch: w }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Chamados');
+  XLSX.writeFile(wb, `chamados_${new Date().toISOString().split('T')[0]}.xlsx`);
+  showToast('📊 Excel exportado com sucesso!', 'success');
+};
+
+// ── TOAST ────────────────────────────────────────
+window.showToast = function(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast ${type} show`;
+  setTimeout(() => t.classList.remove('show'), 3200);
+};
+</script>
+</body>
+</html>
