@@ -170,6 +170,7 @@
     <div class="topbar-actions">
       <button class="btn-excel" onclick="exportExcel()">📊 Exportar Excel</button>
       <button class="btn-new" onclick="openModal()">＋ Novo Chamado</button>
+      <button class="btn-new" onclick="openEmpresaModal()">🏢 Nova Empresa</button>
     </div>
   </div>
   <div class="content">
@@ -196,9 +197,9 @@
     <div class="table-wrap">
       <table>
         <thead><tr>
-          <th>#</th><th>Foto</th><th>Data</th><th>Unidade</th>
-          <th>Setor</th><th>Motivo</th><th>Acionado por</th>
-          <th>Status</th><th>Resol. Hoje</th><th></th>
+          <th>#</th><th>Foto</th><th>Data</th><th>Empresa</th>
+<th>Unidade</th><th>Setor</th><th>Motivo</th><th>Acionado por</th>
+<th>Status</th><th>Resol. Hoje</th><th></th>
         </tr></thead>
         <tbody id="tableBody"><tr><td colspan="10"><div class="loading">Conectando ao Firebase...</div></td></tr></tbody>
       </table>
@@ -215,12 +216,16 @@
     </div>
     <div class="modal-body">
       <div class="form-grid">
+        <div class="form-group">
+  <label>Empresa *</label>
+  <select class="form-control" id="f_empresa"></select>
+</div>
         <div class="form-group"><label>Unidade *</label>
           <select class="form-control" id="f_unidade">
             <option value="">Selecione...</option>
             <option value="Hospital Nossa Senhora de Lourdes">Hospital N.S. de Lourdes</option>
             <option value="Clínica São Lucas">Clínica São Lucas</option>
-            <option value="Clínica São Lucas">Codingtech  </option>
+            <option value="Codingtech">Codingtech</option>
           </select>
         </div>
         <div class="form-group"><label>Data *</label><input type="date" class="form-control" id="f_data"></div>
@@ -289,7 +294,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getFirestore, collection, addDoc, deleteDoc,
-  doc, updateDoc, onSnapshot, query, orderBy, serverTimestamp
+  doc, updateDoc, onSnapshot, query, orderBy, serverTimestamp,
+  getDocs
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject
@@ -314,6 +320,7 @@ try {
   db      = getFirestore(app);
   storage = getStorage(app);
   startListener();
+  carregarEmpresas();
 } catch(e) {
   document.getElementById('tableBody').innerHTML =
     `<tr><td colspan="10"><div class="empty">
@@ -323,7 +330,17 @@ try {
       localize o bloco <b>firebaseConfig</b> e cole seus dados.</div>
     </div></td></tr>`;
 }
+async function carregarEmpresas() {
+  const snap = await getDocs(collection(db, "empresas"));
+  const select = document.getElementById("f_empresa");
 
+  select.innerHTML = '<option value="">Selecione...</option>';
+
+  snap.forEach(doc => {
+    const emp = doc.data();
+    select.innerHTML += `<option value="${emp.nome}">${emp.nome}</option>`;
+  });
+}
 // ── STATE ──────────────────────────────────────
 let chamados       = [];
 let editingId      = null;
@@ -388,7 +405,8 @@ window.renderTable = function() {
       <td style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-muted)">${String(i+1).padStart(3,'0')}</td>
       <td>${fotoHtml}</td>
       <td>${fmtDate(c.data)}</td>
-      <td><span class="badge ${c.unidade?.includes('Hospital')?'badge-hospital':'badge-clinica'}">${c.unidade?.includes('Hospital')?'🏥 Hospital':'🏨 Clínica'}</span></td>
+      <td class="main-text">${c.empresa || '—'}</td>
+<td><span class="badge ${c.unidade?.includes('Hospital')?'badge-hospital':'badge-clinica'}">${c.unidade || '—'}</span></td>
       <td class="main-text">${c.setor||'—'}</td>
       <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.motivo||'—'}</td>
       <td>${c.acionado||'—'}</td>
@@ -502,6 +520,7 @@ window.editChamado = function(id) {
 
 window.saveChamado = async function() {
   const campos = {
+    empresa: document.getElementById('f_empresa').value,
     unidade:       document.getElementById('f_unidade').value,
     data:          document.getElementById('f_data').value,
     setor:         document.getElementById('f_setor').value,
@@ -612,6 +631,92 @@ window.showToast = function(msg, type = 'success') {
   t.className = `toast ${type} show`;
   setTimeout(() => t.classList.remove('show'), 3200);
 };
+
+window.closeEmpresa = function() {
+  document.getElementById('empresaOverlay').classList.remove('open');
+};
+
+window.closeEmpresaOutside = function(e) {
+  if (e.target === document.getElementById('empresaOverlay')) closeEmpresa();
+};
+
+window.salvarEmpresa = async function() {
+  const nome = document.getElementById('empresaNome').value.trim();
+
+  if (!nome) {
+    showToast('Digite o nome da empresa', 'error');
+    return;
+  }
+
+  try {
+    await addDoc(collection(db, "empresas"), {
+      nome: nome,
+      criadoEm: serverTimestamp()
+    });
+
+    showToast('🏢 Empresa cadastrada!', 'success');
+    closeEmpresa();
+    carregarEmpresas();
+  } catch(e) {
+    showToast('Erro: ' + e.message, 'error');
+  }
+
+};
+  // EMPRESAS
+window.openEmpresaModal = function() {
+  document.getElementById('empresaNome').value = '';
+  document.getElementById('empresaOverlay').classList.add('open');
+};
+
+window.closeEmpresa = function() {
+  document.getElementById('empresaOverlay').classList.remove('open');
+};
+
+window.closeEmpresaOutside = function(e) {
+  if (e.target === document.getElementById('empresaOverlay')) closeEmpresa();
+};
+
+window.salvarEmpresa = async function() {
+  const nome = document.getElementById('empresaNome').value.trim();
+
+  if (!nome) {
+    showToast('Digite o nome da empresa', 'error');
+    return;
+  }
+
+  try {
+    await addDoc(collection(db, "empresas"), {
+      nome: nome,
+      criadoEm: serverTimestamp()
+    });
+
+    showToast('🏢 Empresa cadastrada!', 'success');
+    closeEmpresa();
+    carregarEmpresas();
+  } catch(e) {
+    showToast('Erro: ' + e.message, 'error');
+  }
+};
 </script>
+<div class="modal-overlay" id="empresaOverlay" onclick="closeEmpresaOutside(event)">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <div class="modal-title">Nova Empresa</div>
+      <button class="modal-close" onclick="closeEmpresa()">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Nome da Empresa *</label>
+        <input class="form-control" id="empresaNome" placeholder="Ex: Hospital XPTO">
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeEmpresa()">Cancelar</button>
+      <button class="btn-save" onclick="salvarEmpresa()">Salvar</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
